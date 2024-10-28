@@ -1,4 +1,5 @@
 from .pointnet import PointNetEncoder
+from .pointnet_mean import PointNetMeanEncoder  # Custom addition
 from .pointnetv2 import PointNet2Encoder, PointNet2Decoder, PointNetFPModule
 from .pointnext import PointNextEncoder, PointNextDecoder
 from .dgcnn import DGCNN

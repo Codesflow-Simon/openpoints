@@ -7,6 +7,7 @@ from openpoints.models.layers.graph_conv import DynConv, GraphConv, ResDynBlock,
 from openpoints.models.layers import create_convblock1d
 import logging
 from ..build import MODELS
+import warnings
 
 
 @MODELS.register_module()
@@ -48,8 +49,19 @@ class DeepGCN(nn.Module):
         if kwargs:
             logging.warning(f"kwargs: {kwargs} are not used in {__class__.__name__}")
 
+        if k <= 0:
+            raise ValueError(f"k must be positive, got {k}")
+        if epsilon < 0:
+            raise ValueError(f"epsilon must be non-negative, got {epsilon}")
+        if channels <= 0:
+            raise ValueError(f"channels must be positive, got {channels}")
+
+        if block.lower() not in ['dense', 'res', 'plain']:
+            warnings.warn(f"Unexpected block type '{block}'. Expected one of: dense, res, plain")
+
         c_growth = channels
         self.n_blocks = n_blocks
+        self.in_channels = in_channels
 
         self.knn = DilatedKNN(k, 1, use_stochastic, epsilon)
         self.head = GraphConv(in_channels, channels, conv, bias=False,
@@ -117,8 +129,22 @@ class DeepGCN(nn.Module):
     def forward(self, pts, features=None):
         if hasattr(pts, 'keys'):
             pts, features = pts['pos'], pts['x']
+            
+        if not torch.is_tensor(pts):
+            raise TypeError(f"Expected pts to be torch.Tensor, got {type(pts)}")
+            
+        if features is not None and not torch.is_tensor(features):
+            raise TypeError(f"Expected features to be torch.Tensor, got {type(features)}")
+            
+        if len(pts.shape) != 3:
+            raise ValueError(f"Expected pts shape [B,N,3], got {pts.shape}")
+            
         if features is None:
             features = pts.transpose(1, 2).contiguous()
+            
+        if features.shape[1] != self.in_channels:
+            raise ValueError(f"Expected features to have {self.in_channels} channels, got {features.shape[1]}")
+
         features = features.unsqueeze(-1)
         feats = [self.head(features, self.knn(pts))]
         for i in range(self.n_blocks - 1):

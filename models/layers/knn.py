@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import warnings
 # from knn_cuda import KNN as KNNCUDA
 
 
@@ -15,6 +16,13 @@ def knn_point(k, query, support=None):
     """
     if support is None:
         support = query
+    
+    # Add shape validation
+    if len(query.shape) != 3:
+        raise ValueError(f"Expected query to be 3D tensor [B,N,C], got shape {query.shape}")
+    if len(support.shape) != 3:
+        raise ValueError(f"Expected support to be 3D tensor [B,N,C], got shape {support.shape}")
+        
     dist = torch.cdist(query, support)
     k_dist = dist.topk(k=k, dim=-1, largest=False, sorted=True)
     return k_dist.values, k_dist.indices
@@ -43,6 +51,9 @@ class KNN(nn.Module):
         self.neighbors = neighbors
         self.farthest = farthest
         self.sorted = sorted
+        
+        if kwargs:
+            warnings.warn(f"Unused parameters in KNN initialization: {kwargs}")
 
     @torch.no_grad()
     def forward(self, query, support=None):
@@ -56,6 +67,17 @@ class KNN(nn.Module):
         """
         if support is None:
             support = query
+            
+        # Add validation
+        if not torch.is_tensor(query):
+            raise TypeError(f"Expected query to be torch.Tensor, got {type(query)}")
+            
+        if len(query.shape) != 3:
+            raise ValueError(f"Expected query shape [B,N,C], got {query.shape}")
+            
+        if self.neighbors > query.shape[1]:
+            warnings.warn(f"Number of neighbors ({self.neighbors}) is larger than number of points ({query.shape[1]})")
+            
         dist = torch.cdist(query, support)
         k_dist = dist.topk(k=self.neighbors, dim=-1, largest=self.farthest, sorted=self.sorted)
         return k_dist.values, k_dist.indices.int()
